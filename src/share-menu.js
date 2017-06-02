@@ -1,43 +1,35 @@
-'use strict'
-
 var $ = require('jquery');
-var BaseMenu = require('streamhub-ui/menu/base');
+var AriaUtil = require('streamhub-ui/util/aria');
 var inherits = require('inherits');
 var loader = require('livefyre-bootstrap/loader');
-var log = require('debug')('streamhub-share/share-menu');
-var Share = require('streamhub-ui/menu/share');
+var BaseShare = require('streamhub-share/base-share');
 var SocialUtil = require('streamhub-share/util/share-format');
+var log = require('debug')('streamhub-share/share-menu');
+
+'use strict'
+
+// CONSTANTS
+var INSIGHTS_VERBS = {
+    facebook: 'ShareFacebook',
+    twitter: 'ShareTwitter'
+};
 
 /**
  * Flag menu.
  * @constructor
- * @extends {BaseMenu}
+ * @extends {BaseShare}
  * @param {Object} opts Config options.
  */
 function ShareMenu(opts) {
-    Share.call(this, opts);
+    BaseShare.call(this, opts);
 
     this.topNavEnabled = false;
 }
-inherits(ShareMenu, Share);
-
-ShareMenu.prototype.events = BaseMenu.prototype.events;
+inherits(ShareMenu, BaseShare);
 
 ShareMenu.prototype.render = function () {
-    Share.prototype.render.call(this);
+    BaseShare.prototype.render.call(this);
     loader.decorate($('.lf-loader-container')[0], 162);
-};
-
-ShareMenu.prototype._renderContent = function () {
-    Share.prototype._renderContent.call(this);
-
-    var link = document.createElement('a');
-    link.setAttribute('href', this._model.permalink);
-    link.setAttribute('class', 'lf-share-link fycon-format-link');
-    link.innerText = '  Copy Permalink';
-    this.$el.find('.lf-menu-foot').html('').append(link);
-
-    this.delegateEvents();
 };
 
 /**
@@ -49,7 +41,7 @@ ShareMenu.prototype._fetchPermalink = function () {
         this._renderContent();
         return;
     }
-    
+
     var self = this;
     this._model.collection.getPermalink({content: this._model}, function (err, data) {
         if (err) {
@@ -61,13 +53,24 @@ ShareMenu.prototype._fetchPermalink = function () {
 };
 
 /**
+ * @extend
+ */
+ShareMenu.prototype.buildEventData = function (ev) {
+    var data = BaseShare.prototype.buildEventData.call(this, ev);
+    data.insightsVerb = INSIGHTS_VERBS[data.value];
+    return data;
+};
+
+/**
  * Handle the option click event. This should trigger a write event that will
  * flag the comment.
  * @param {jQuery.Event} ev
  */
 ShareMenu.prototype.handleOptionClick = function (ev) {
-    // ev.stopPropagation();
-    // this.emit(this.postEvent, this.buildEventData(ev));
+    if (AriaUtil.isNonAriaKeyEvent(ev)) {
+        return;
+    }
+
     var data = this.buildEventData(ev);
 
     /** From sharer.js and previously, an annotations controller */
@@ -85,17 +88,13 @@ ShareMenu.prototype.handleOptionClick = function (ev) {
     var shareObj = SocialUtil.contentToShare(content, data.value);
     shareObj.assetServer = this.opts.assetServer;
     shareObj.provider = data.value;
-    
+
     var params = SocialUtil.generateParams(shareObj);
     window.open(baseUrl + params, 'intent', specs);
+    $(ev.target).trigger('insights:local', {type: data.insightsVerb});
 };
 
-ShareMenu.prototype.hide = function (ev) {
-    this.detach();
-    this.destroy();
-};
-
-/** 
+/**
  * From sharer.js and previously, an annotations controller
  * @enum {string}
  */
@@ -103,6 +102,5 @@ var SHARE_URLS = {
     facebook: 'https://www.facebook.com/dialog/feed',
     twitter: 'https://twitter.com/intent/tweet'
 };
-
 
 module.exports = ShareMenu;
